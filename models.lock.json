@@ -1,0 +1,7 @@
+[
+  {"repo":"google/siglip2-base-patch16-384","revision":"f775b65a79762255128c981547af89addcfe0f88","directory":"f775b65a79762255128c981547af89addcfe0f88","weight":"model.safetensors","sha256":"ed72c0ace85020ae610fc817c2538b9cae5a477b012a50859c60af5b3ad30857"},
+  {"repo":"Qwen/Qwen3-VL-Reranker-2B","revision":"4bd860ac4f15ad1897a214615cccc700f8f71818","directory":"Qwen3-VL-Reranker-2B","weight":"model.safetensors","sha256":"466ec01961061e9d7f804b4fb1625fb6f406106cd1567e026096d4736fa9d5b9"},
+  {"repo":"PaddlePaddle/PP-OCRv5_mobile_det","revision":"0d63e78e2b680928f6b1747d76a08db6e645efb7","directory":"paddlex/official_models/PP-OCRv5_mobile_det","weight":"inference.pdiparams","sha256":"afa1820cb16c1fd0dad589d0f8b389139061c1ef6d68019685fd07be997dda5b"},
+  {"repo":"PaddlePaddle/eslav_PP-OCRv5_mobile_rec","revision":"7553801264d3379d8d2e854971989e5e26c22e03","directory":"paddlex/official_models/eslav_PP-OCRv5_mobile_rec","weight":"inference.pdiparams","sha256":"f11057b05d8517868bca505271278973d706600d9dcc184cbcf5c4512091c32b"}
+]
+

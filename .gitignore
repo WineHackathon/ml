@@ -1,0 +1,12 @@
+.env
+.venv
+.venv-ocr
+.pytest_cache/
+__pycache__/
+*.pyc
+build/
+*.egg-info/
+models/
+work/
+data/catalog_images/
+artifacts/live_ocr_cache.json

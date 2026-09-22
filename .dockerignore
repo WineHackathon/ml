@@ -1,0 +1,9 @@
+.git
+.env
+.venv*
+.pytest_cache
+__pycache__
+models
+data/catalog_images
+artifacts/live_ocr_cache.json
+
