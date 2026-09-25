@@ -15,7 +15,7 @@ dependencies = [
   "python-multipart==0.0.32",
   "qwen-vl-utils==0.0.14",
   "safetensors==0.8.0",
-  "torch==2.14.0",
+  "torch>=2.11,<2.15",
   "transformers==5.17.0",
   "uvicorn==0.53.0",
 ]
@@ -32,4 +32,3 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
