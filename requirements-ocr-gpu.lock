@@ -1,0 +1,6 @@
+numpy==2.3.5
+opencv-contrib-python==4.10.0.84
+paddleocr==3.7.0
+paddlepaddle-gpu @ https://paddle-whl.cdn.bcebos.com/stable/cu126/paddlepaddle-gpu/paddlepaddle_gpu-3.3.1-cp312-cp312-linux_x86_64.whl#sha256=b1500120002c2bf4542c841e25296cf10c52e0d395053aa395f79bd9c0303cce
+paddlex==3.7.2
+pillow==12.3.0

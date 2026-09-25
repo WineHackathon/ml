@@ -129,6 +129,8 @@ def _cache_key(path: Path) -> str:
     digest = hashlib.sha256()
     digest.update(path.read_bytes())
     digest.update(json.dumps(OCR_CONFIG, sort_keys=True).encode())
+    backend = os.getenv("WINE_OCR_DEVICE", "cpu").partition(":")[0]
+    digest.update(json.dumps({"backend": backend, "enable_mkldnn": False}, sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -138,10 +140,12 @@ def load_engine(cpu_threads: int):
     return PaddleOCR(
         text_detection_model_name=OCR_CONFIG["detector"],
         text_recognition_model_name=OCR_CONFIG["recognizer"],
+        device=os.getenv("WINE_OCR_DEVICE", "cpu"),
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=False,
         cpu_threads=cpu_threads,
+        enable_mkldnn=False,
     )
 
 

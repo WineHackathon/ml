@@ -21,6 +21,6 @@
   "ranking": "descending_qwen_yes_probability_then_ocr_entity_score_on_exact_ties_then_slug",
   "transformers_5_compatibility": "convert processor mm_token_type_ids from list to tensor without changing values",
   "score_cache_key": "sha256(config + query bytes + document bytes + document text)",
-  "base_index_sha256": "8a884e6eedb8212d22c5647f23bb63bb6c89035eb9e229f16ef7278f89e7a3b8",
-  "manifest_sha256": "0cbf9ac25a4d4f6cfd0911e70c693f24458a12785e104f09dae8910e88211bff"
+  "base_index_sha256": "bcf7caccccf1629863794313c5c90efbf2de5be890917c7f69d77bb761390fce",
+  "manifest_sha256": "be1865f14c13b25a2a2b2223402650dd4164163e43ed8561b7a2fbfe5955fd8c"
 }
