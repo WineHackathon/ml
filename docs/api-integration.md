@@ -2,6 +2,18 @@
 
 The service accepts an image upload and returns a catalog candidate. It does not accept an image URL. Send the original image bytes as `multipart/form-data` with the field name `image`.
 
+## Current H100 deployment
+
+The service is running on `rirodionov-sr008`, bound to its private interface at `10.227.91.47:8080`. A backend on the same private network can use `http://10.227.91.47:8080` as its base URL. This is the current worker IP, not a stable DNS name; it may change when the worker is recreated.
+
+The address is not reachable directly from the developer laptop. For local testing, keep this tunnel open:
+
+```bash
+ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008
+```
+
+Then use `http://127.0.0.1:18080` as the base URL. Verified through this tunnel: `/ready` returned 200 and `/v1/eval/predict` returned a slug for an uploaded catalog image.
+
 ## Endpoints
 
 | Method | Path | Purpose |
