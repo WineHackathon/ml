@@ -1,6 +1,6 @@
-# Wine ML API: backend contract
+# Wine ML API: backend handoff
 
-The service accepts an image upload and returns a catalog candidate. It does not accept an image URL. Send the original image bytes as `multipart/form-data` with the field name `image`.
+This is the integration and operations handoff for the application backend. The service accepts image bytes and returns a proposed wine-catalog match; it does not accept an image URL or JSON/base64 payload. Send `multipart/form-data` with the field name `image`.
 
 ## Current H100 deployment
 
@@ -20,6 +20,8 @@ Then use `http://127.0.0.1:18080` as the base URL. Verified through this tunnel:
 |---|---|---|
 | `GET` | `/health` | Process is alive; does not guarantee models are loaded. |
 | `GET` | `/ready` | Models, index, references, and OCR worker are ready. Wait for HTTP 200 before routing traffic; startup can take a few minutes. |
+| `GET` | `/docs` | Interactive Swagger/OpenAPI docs exposed by FastAPI. Keep private with the API. |
+| `GET` | `/openapi.json` | Machine-readable OpenAPI schema. |
 | `POST` | `/v1/recognize` | Full response for application/backend use. |
 | `POST` | `/v1/eval/predict` | Organizer-compatible minimal response: `{"slug":"..."}`. |
 
@@ -30,44 +32,67 @@ curl -fS -X POST http://HOST:8080/v1/recognize \
   -F 'image=@/path/to/bottle.jpg;type=image/jpeg'
 ```
 
-Use JPEG, PNG, or WebP. The upload limit is 20 MiB and 32 megapixels. Do not send base64 JSON or a URL. The MIME type is optional; the image is decoded from the uploaded bytes.
+Use JPEG, PNG, or WebP. The upload limit is 20 MiB and 32 megapixels. Do not send base64 JSON or a URL. The MIME type is optional; the image is decoded from the uploaded bytes. The API does not retain the upload as a catalog asset.
+
+The short compatibility endpoint is:
+
+```bash
+curl -fS -X POST http://HOST:8080/v1/eval/predict \
+  -F 'image=@/path/to/bottle.jpg;type=image/jpeg'
+```
+
+It returns only `{"slug":"catalog-product-slug"}`. Prefer `/v1/recognize` if the product UI needs a card, alternatives, or diagnostic timings.
 
 ## Full response
 
-`200 OK` returns a JSON object. Example shape (catalog values and candidate count vary):
+`200 OK` returns a JSON object. This is an example from the live H100 deployment; `top5` is abbreviated here. Catalog values, scores, and timings vary by image.
 
 ```json
 {
   "status": "provisional_candidate",
   "degraded": false,
   "degraded_reason": null,
-  "slug": "catalog-product-slug",
+  "slug": "valeriy-zaharin-rubedo-reserve-merlo-krasnoe-suhoe-13",
   "card": {
-    "name": "Wine name",
-    "producer": "Producer",
-    "volume": "0.75 л"
+    "slug": "valeriy-zaharin-rubedo-reserve-merlo-krasnoe-suhoe-13",
+    "name": "Rubedo. Reserve",
+    "producer": "Валерий Захарьин",
+    "region": "Крым",
+    "color": "Глубокий рубиновый",
+    "type": "Красное",
+    "grapes": "Мерло",
+    "description": "Вкус: С тонами вишни, черешни, шелковицы, ежевики, какао, гвоздики, с мягкими танинами и долгим послевкусием."
   },
   "confidence": null,
   "uncalibrated": true,
   "raw_scores": {
-    "visual_cosine": 0.82,
-    "reranker": 0.91
+    "visual_cosine": 0.897,
+    "reranker": 0.695
   },
-  "margin": 0.14,
-  "identity": {"status": "provisional"},
+  "margin": 0.023,
+  "identity": {"identity_status": "provisional", "join_method": "dual_key_candidate"},
   "top5": [
-    {"slug": "catalog-product-slug", "score": 0.82, "card": {"name": "Wine name"}}
+    {
+      "slug": "valeriy-zaharin-rubedo-reserve-merlo-krasnoe-suhoe-13",
+      "score": 0.897,
+      "card": {"name": "Rubedo. Reserve"},
+      "provenance": {"identity_status": "provisional", "join_method": "dual_key_candidate"},
+      "reranker_score": 0.695,
+      "ocr_entity_score": 0.163,
+      "ocr_year_match": false,
+      "ocr_year_mismatch": false
+    }
   ],
   "timings_ms": {
-    "decode": 12.3,
-    "embedding": 410.2,
-    "search": 3.1,
-    "ocr": 500.0,
-    "qwen": 1100.0,
-    "rerank": 1800.0,
-    "total": 2300.0
+    "decode": 62.8,
+    "embedding": 707.27,
+    "search": 7.41,
+    "ocr": 1275.0,
+    "qwen": 1416.27,
+    "rerank": 1772.95,
+    "total": 2550.43
   },
-  "catalog_version": "...",
+  "catalog_version": "be1865f14c13b25a",
   "gallery_policy": "provisional",
   "catalog_coverage": {
     "indexed_slugs": 2087,
@@ -77,22 +102,36 @@ Use JPEG, PNG, or WebP. The upload limit is 20 MiB and 32 megapixels. Do not sen
   },
   "model_version": {
     "source": "google/siglip2-base-patch16-384",
-    "revision": "...",
+    "revision": "f775b65a79762255128c981547af89addcfe0f88",
     "reranker": "Qwen/Qwen3-VL-Reranker-2B",
-    "reranker_config_sha256": "..."
+    "reranker_config_sha256": "5980e6f24598e425e754e886bda247859857cddf6d819f16c511d36bf5d09abe"
   }
 }
 ```
 
-Treat `slug` as the proposed catalog match, not a guaranteed identification. `confidence` is deliberately `null`: the returned raw model scores are uncalibrated and must not be displayed or thresholded as probabilities. Use `top5` for a review/selection flow. `status: "degraded_candidate"` means the visual candidate is returned without completed Qwen reranking; `degraded_reason` explains why.
+### Response fields the backend should rely on
+
+- `slug`: the current best candidate slug. It is a suggestion, not a guaranteed identification.
+- `card`: pass-through catalog data for the selected `slug`. It commonly contains `slug`, `name`, `producer`, `region`, `color`, `type`, `grapes`, and `description`; fields vary by product. Render tolerantly and do not assume every field is present.
+- `top5`: up to five candidate records for a user-selection/review flow. Each has `slug`, visual `score`, `card`, and `provenance`; this pipeline also returns `reranker_score` and OCR evidence fields.
+- `status` / `degraded` / `degraded_reason`: candidate state. `provisional_candidate` is the normal current state; `degraded_candidate` means a candidate is returned without completed Qwen reranking.
+- `identity` and `gallery_policy`: provenance/trust labels. Current catalog coverage is mostly provisional; do not present the suggestion as verified identity.
+- `confidence`: always `null` for this build. `raw_scores.visual_cosine`, `raw_scores.reranker`, and `margin` are uncalibrated ranking diagnostics, not probabilities. Do not display as a percent or use as a calibrated accept/reject threshold.
+- `timings_ms`: server-side stage timings; `ocr` may be `null` when OCR was not run. `total` is the API's measured inference time, not network/upload time.
+- `catalog_version`, `catalog_coverage`, `model_version`: diagnostics for logs/support; they can change with deployment/catalog updates.
+
+The current catalog index covers 2,087 of 2,103 manifest products, and most identities are provisional. The sample result above demonstrates the response shape only; it is not an accuracy claim.
 
 ## Errors and readiness
 
 - `400`: empty, corrupt, unsupported, too-large, or over-resolution image. Body: `{"detail":"..."}`.
+- `422`: request validation failed, usually because the `image` multipart field is missing.
 - `503`: model/OCR not ready or inference failed. Body: `{"detail":"..."}`. Check `GET /ready`; do not route requests until it returns 200.
 - `/health` is liveness only. `/ready` returns `{"ready":false,"error":"..."}` with HTTP 503 until initialization completes.
 
-Use a backend timeout of at least 12 seconds; the measured H100 sample had p95 below 3 seconds, but this is not a per-request latency guarantee. Retry only transient 503s, with bounded backoff; do not blindly retry 400s.
+Use a 12-second or greater client timeout. The measured H100 field sample had p95 2.68 seconds and max 3.24 seconds; other small evaluation runs reached 4.25 seconds. Treat this as a benchmark result, not a per-request SLA. Cold startup was about 159–164 seconds; keep traffic off until `/ready` returns 200.
+
+Do not retry 400/422. For 503, check readiness and use bounded backoff; do not retry in a tight loop while the model is unready. Inference is read-only, so a bounded retry after a network timeout is safe but repeats the compute. Limit backend concurrency: the deployment uses one worker and a shared H100.
 
 ## Python backend
 
@@ -110,4 +149,16 @@ result = response.json()
 print(result["slug"], result["top5"])
 ```
 
-The service currently has no built-in authentication. Keep the port on a trusted private network or access it through an SSH tunnel/authenticated proxy; do not expose it directly to the public internet. The examples directory also contains Python and TypeScript client snippets.
+The runnable repository examples are [`examples/backend_client.py`](../examples/backend_client.py) and [`examples/backend_client.ts`](../examples/backend_client.ts). The Python example uses only the standard library; the TypeScript example uses built-in `fetch`/`FormData`.
+
+## Deployment and security handoff
+
+- Current host: `rirodionov-sr008`; code directory: `/home/jovyan/wine-ml-api`.
+- Models are read from persistent FS2 at `/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models`; the setup verifies pinned hashes and does not copy them into the code directory.
+- Current base URL for a backend with private-network routing: `http://10.227.91.47:8080`. The worker IP is ephemeral; re-check `hostname -I` after worker replacement.
+- For a developer laptop, tunnel with `ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008`, then call `http://127.0.0.1:18080`. Direct laptop access to the private IP is not routed.
+- There is no authentication in the API itself. It is currently bound only to the worker's private IP, but is still unauthenticated on that network. Keep it private or put an authenticated reverse proxy/network policy in front; do not expose it publicly.
+- Call it server-to-server from the backend, not directly from a browser: this service has no CORS policy or user auth.
+- The optional `token` parameter in the example clients sends a bearer token to an upstream proxy. The model API does not validate that token itself.
+
+The repository's [optimization report](optimization-summary.md) documents the small evaluation sets and performance limits; do not present them as production-wide accuracy/SLO guarantees.
