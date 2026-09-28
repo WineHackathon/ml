@@ -8,6 +8,7 @@ Run this on the H100 host or another Linux host with access to the private GitHu
 
 ```bash
 git lfs install
+cd /workspace-SR008.fs2/rodionov
 GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch codex/quickstart \
   https://github.com/WineHackathon/ml.git wine-ml-api
 cd wine-ml-api
@@ -23,6 +24,12 @@ On `rirodionov-sr008`, the verified model root is:
 export WINE_MODELS_ROOT=/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models
 ```
 
+Keep the Python environments in the home directory rather than writing several GB to FS2. The current environments are already there:
+
+```bash
+export WINE_ENV_ROOT=/home/jovyan/wine-ml-api
+```
+
 Set `HOST` to the worker's private interface address. The current worker is `10.227.91.47`; check `hostname -I` if the worker has been recreated. Bind only to a private interface, not a public one.
 
 ```bash
@@ -32,7 +39,7 @@ export PORT=8080
 ./scripts/run-h100.sh
 ```
 
-`setup-h100.sh` creates the CUDA 12.8 PyTorch and GPU OCR environments, verifies the existing FS2 model hashes and the checked-in index, and does not pull LFS when `WINE_MODELS_ROOT` points outside the checkout. Python 3.12 and `uv` are required. Leave the launch command running; use `Ctrl-C` to stop it. For a persistent terminal, run these commands inside `tmux`.
+`setup-h100.sh` creates/updates the CUDA 12.8 PyTorch and GPU OCR environments under `WINE_ENV_ROOT`, verifies the existing FS2 model hashes and the checked-in index, and does not pull LFS when `WINE_MODELS_ROOT` points outside the checkout. Python 3.12 and `uv` are required. The active code path is `/workspace-SR008.fs2/rodionov/wine-ml-api`; the environment root remains in `/home/jovyan/wine-ml-api`. Leave the launch command running; use `Ctrl-C` to stop it. For a persistent terminal, run these commands inside `tmux`.
 
 For a persistent SSH session, start `tmux` before launching the server:
 

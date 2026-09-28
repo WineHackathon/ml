@@ -2,8 +2,9 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+WINE_ENV_ROOT="${WINE_ENV_ROOT:-$root}"
 WINE_MODELS_ROOT="${WINE_MODELS_ROOT:-$root/models}"
-export WINE_MODELS_ROOT
+export WINE_ENV_ROOT WINE_MODELS_ROOT
 
 export CUDA_VISIBLE_DEVICES="${WINE_CUDA_DEVICE:-0}"
 export WINE_DEVICE="${WINE_DEVICE:-cuda}"
@@ -14,9 +15,9 @@ export WINE_RERANKER_DEVICE="${WINE_RERANKER_DEVICE:-cuda}"
 export WINE_RERANKER_PRELOAD="${WINE_RERANKER_PRELOAD:-1}"
 export WINE_DISABLE_CUDNN_SDP="${WINE_DISABLE_CUDNN_SDP:-1}"
 export WINE_OCR_DEVICE="${WINE_OCR_DEVICE:-gpu:0}"
-export WINE_OCR_PYTHON="${WINE_OCR_PYTHON:-$root/.venv-ocr-gpu/bin/python}"
+export WINE_OCR_PYTHON="${WINE_OCR_PYTHON:-$WINE_ENV_ROOT/.venv-ocr-gpu/bin/python}"
 export WINE_OCR_WORKER="${WINE_OCR_WORKER:-1}"
 export PADDLE_PDX_CACHE_HOME="${PADDLE_PDX_CACHE_HOME:-$WINE_MODELS_ROOT/paddlex}"
-export WINE_PYTHON="${WINE_PYTHON:-$root/.venv-h100/bin/python}"
+export WINE_PYTHON="${WINE_PYTHON:-$WINE_ENV_ROOT/.venv-h100/bin/python}"
 
 exec "$root/scripts/run.sh"

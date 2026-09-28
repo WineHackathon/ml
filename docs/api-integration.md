@@ -166,7 +166,7 @@ The runnable repository examples are [`examples/backend_client.py`](../examples/
 
 ## Deployment and security handoff
 
-- Current host: `rirodionov-sr008`; code directory: `/home/jovyan/wine-ml-api`.
+- Current host: `rirodionov-sr008`; active code directory: `/workspace-SR008.fs2/rodionov/wine-ml-api`; Python environments stay in `/home/jovyan/wine-ml-api`.
 - Models are read from persistent FS2 at `/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models`; the setup verifies pinned hashes and does not copy them into the code directory.
 - Current base URL for a backend with private-network routing: `http://10.227.91.47:8080`. The worker IP is ephemeral; re-check `hostname -I` after worker replacement. This route is private and does not require Tuna's token.
 - Public base URL: `https://rirodionov-wine-api.ru.tuna.am`; the Tuna ingress requires `X-Token` and limits traffic to 2 requests/second. The protected ingress was verified from outside the H100 host: missing token returned 401, valid token returned `/ready` 200, and both prediction routes returned HTTP 200.
