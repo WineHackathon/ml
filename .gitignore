@@ -8,6 +8,7 @@
 .cache/
 run/
 .private/
+/secrets/tuna.key
 .pytest_cache/
 __pycache__/
 *.pyc

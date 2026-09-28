@@ -170,7 +170,7 @@ The runnable repository examples are [`examples/backend_client.py`](../examples/
 - For private-network calls, bind only to a private worker interface and configure the backend with `http://PRIVATE_GPU_HOST:8080`.
 - Public base URL: `https://akcizny-sbor.ru.tuna.am`; requests require `X-Token` and are rate limited to 2 requests/second. Missing keys return 401; the deployed `/ready` and both prediction routes were verified with a valid key.
 - The API itself has no authentication. The Tuna ingress protects the public endpoint; direct access to the private worker address has no auth. Do not expose port 8080 directly to the public internet.
-- For this hackathon, the shared Tuna key is committed at [`secrets/tuna.key`](../secrets/tuna.key) in the private repository. Anyone with repository access can use it; rotate it and move it to a secret manager before any production use.
+- Store the shared Tuna token outside the repository, such as in the backend's secret manager. Send it as `X-Token`; do not commit the token or place it in a browser client. Because the token was previously committed, rotate it before production use: removing the file from the current tree does not erase it from Git history.
 - Call it server-to-server from the backend, not directly from a browser: this service has no CORS policy or user auth.
 - The optional `token` parameter in the example clients sends `X-Token` for Tuna. Direct private-network calls can omit it. The model API itself does not validate this token; Tuna does.
 

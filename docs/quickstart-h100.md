@@ -88,7 +88,7 @@ Keep the ingress in a second persistent terminal:
 
 ```bash
 tmux new -s wine-api-tuna
-export TUNA_KEY_AUTH="$(tr -d '\n' < secrets/tuna.key)"
+export TUNA_KEY_AUTH="${WINE_ML_API_TOKEN:?Load the Tuna token from your secret manager first}"
 while true; do
   .tools/tuna --config "$WINE_APP_ROOT/.private/tuna-cli.yml" http \
     http://127.0.0.1:8080 --subdomain=akcizny-sbor \
@@ -97,7 +97,7 @@ while true; do
 done
 ```
 
-Detach with `Ctrl-B`, then `D`. The public URL is `https://akcizny-sbor.ru.tuna.am`; send the key in `X-Token`. Keep the Git repository private while the hackathon key is tracked there.
+Detach with `Ctrl-B`, then `D`. The public URL is `https://akcizny-sbor.ru.tuna.am`; clients send the same externally managed token in `X-Token`. Keep the token outside Git.
 
 ## Access from a developer laptop
 
@@ -115,7 +115,7 @@ curl -f -F 'image=@bottle.jpg;type=image/jpeg' \
   http://127.0.0.1:18080/v1/recognize
 ```
 
-For external backends, use `https://akcizny-sbor.ru.tuna.am` and send the key from `secrets/tuna.key` in `X-Token`. Tuna enforces HTTPS and a 2 requests/second rate limit. The repository must stay private while it contains this hackathon key.
+For external backends, use `https://akcizny-sbor.ru.tuna.am` and send the token from your secret manager in `X-Token`. Tuna enforces HTTPS and a 2 requests/second rate limit. Never commit the token; rotate the previously committed value before production use.
 
 A backend on the same private network can call `http://PRIVATE_GPU_HOST:8080` directly. The API itself has no authentication or CORS: use the protected Tuna URL for external server-to-server access, and never expose port 8080 directly to the public internet.
 
