@@ -1,45 +1,56 @@
 # Quick start: Wine ML API on H100
 
-This is the shortest path for the current `rirodionov-sr008` H100 deployment. It reuses the verified weights already stored on FS2 instead of downloading the 5.8 GB Git LFS bundle.
+This is the shortest path for a Linux H100 deployment. Keep the checkout, tools, base Python, environments, secrets, and runtime files under one persistent application root. Model weights can remain in a separate persistent directory, avoiding the 5.8 GB Git LFS download.
 
 ## 1. Clone the code without the bundled weights
 
-Run this on the H100 host or another Linux host with access to the private GitHub repository:
+Choose an application path on the persistent volume assigned to the deployment, then clone the private repository without its LFS weights:
 
 ```bash
 git lfs install
-cd /workspace-SR008.fs2/rodionov
+export WINE_APP_ROOT=/path/to/persistent/workspace/wine-ml-api
 GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch codex/quickstart \
-  https://github.com/WineHackathon/ml.git wine-ml-api
-cd wine-ml-api
+  https://github.com/WineHackathon/ml.git "$WINE_APP_ROOT"
+cd "$WINE_APP_ROOT"
 ```
 
 `GIT_LFS_SKIP_SMUDGE=1` leaves the bundled model files as LFS pointers in the checkout. That is intentional for this path: the server will load real weights from FS2. Do not run `git lfs pull` when using the external model root below.
 
-## 2. Point setup and launch at the persistent models
+## 2. Put tools, Python, and environments on the persistent volume
 
-On `rirodionov-sr008`, the verified model root is:
+Copy the installed tools into the application root and install the managed Python there:
 
 ```bash
-export WINE_MODELS_ROOT=/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models
+mkdir -p .tools .python .cache/uv .private
+cp "$(command -v uv)" .tools/uv
+cp "$(command -v tuna)" .tools/tuna
+chmod 755 .tools/uv .tools/tuna
+export UV="$WINE_APP_ROOT/.tools/uv"
+export UV_CACHE_DIR="$WINE_APP_ROOT/.cache/uv"
+export UV_PYTHON_INSTALL_DIR="$WINE_APP_ROOT/.python"
+"$UV" python install 3.12.11 --install-dir "$UV_PYTHON_INSTALL_DIR"
+export WINE_PYTHON_BIN="$("$UV" python find 3.12.11)"
+export WINE_ENV_ROOT="$WINE_APP_ROOT"
 ```
 
-Keep the Python environments in the home directory rather than writing several GB to FS2. The current environments are already there:
+Set the root to the persistent directory containing the pinned model snapshots, and place the Tuna account config in the ignored `.private` directory with mode 600:
 
 ```bash
-export WINE_ENV_ROOT=/home/jovyan/wine-ml-api
+export WINE_MODELS_ROOT=/path/to/persistent/models
+cp /path/to/private/tuna-cli.yml .private/tuna-cli.yml
+chmod 600 .private/tuna-cli.yml
 ```
 
-Set `HOST` to the worker's private interface address. The current worker is `10.227.91.47`; check `hostname -I` if the worker has been recreated. Bind only to a private interface, not a public one.
+Bind the API to loopback; Tuna runs on the same host and forwards requests to it.
 
 ```bash
-export HOST=10.227.91.47
+export HOST=127.0.0.1
 export PORT=8080
 ./scripts/setup-h100.sh
 ./scripts/run-h100.sh
 ```
 
-`setup-h100.sh` creates/updates the CUDA 12.8 PyTorch and GPU OCR environments under `WINE_ENV_ROOT`, verifies the existing FS2 model hashes and the checked-in index, and does not pull LFS when `WINE_MODELS_ROOT` points outside the checkout. Python 3.12 and `uv` are required. The active code path is `/workspace-SR008.fs2/rodionov/wine-ml-api`; the environment root remains in `/home/jovyan/wine-ml-api`. Leave the launch command running; use `Ctrl-C` to stop it. For a persistent terminal, run these commands inside `tmux`.
+`setup-h100.sh` creates/updates the CUDA 12.8 PyTorch and GPU OCR environments under `WINE_ENV_ROOT`, verifies the external model hashes and checked-in index, and does not pull LFS when `WINE_MODELS_ROOT` points outside the checkout. Python 3.12 and `uv` are required. Keep code and environments under the persistent application root. Leave the launch command running; use `Ctrl-C` to stop it. For a persistent terminal, run these commands inside `tmux`.
 
 For a persistent SSH session, start `tmux` before launching the server:
 
@@ -55,8 +66,8 @@ Detach without stopping the API with `Ctrl-B`, then `D`; later reconnect with `t
 From a second shell on the host:
 
 ```bash
-curl -i http://10.227.91.47:8080/health
-curl -i http://10.227.91.47:8080/ready
+curl -i http://127.0.0.1:8080/health
+curl -i http://127.0.0.1:8080/ready
 ```
 
 `/ready` must return HTTP 200 with `{"ready":true,"error":null}` before the application sends requests. Cold startup has measured around 159–164 seconds. `/health` is liveness only.
@@ -64,18 +75,35 @@ curl -i http://10.227.91.47:8080/ready
 ## 4. Send the first request
 
 ```bash
-curl -fS -X POST http://10.227.91.47:8080/v1/recognize \
+curl -fS -X POST http://127.0.0.1:8080/v1/recognize \
   -F 'image=@bottle.jpg;type=image/jpeg'
 ```
 
 Upload image bytes as multipart field `image` (JPEG, PNG, or WebP; max 20 MiB and 32 megapixels). The response contains a suggested `slug`, catalog `card`, up to five `top5` alternatives, raw scores, and `timings_ms`. `confidence` is `null`; scores are not calibrated probabilities. For the minimal organizer response, use `/v1/eval/predict`, which returns only `{"slug":"..."}`.
 
-## Access from a developer laptop
+## Start the protected Tuna endpoint
 
-The H100 address is private and not directly routed from the laptop. Open a tunnel and use its local port:
+Keep the ingress in a second persistent terminal:
 
 ```bash
-ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008
+tmux new -s wine-api-tuna
+export TUNA_KEY_AUTH="$(tr -d '\n' < secrets/tuna.key)"
+while true; do
+  .tools/tuna --config "$WINE_APP_ROOT/.private/tuna-cli.yml" http \
+    http://127.0.0.1:8080 --subdomain=akcizny-sbor \
+    --https-redirect --rate-limit=2
+  sleep 2
+done
+```
+
+Detach with `Ctrl-B`, then `D`. The public URL is `https://akcizny-sbor.ru.tuna.am`; send the key in `X-Token`. Keep the Git repository private while the hackathon key is tracked there.
+
+## Access from a developer laptop
+
+For direct local development without Tuna, open an SSH tunnel using the deployment's private host and SSH alias:
+
+```bash
+ssh -N -L 18080:PRIVATE_GPU_HOST:8080 SSH_ALIAS
 ```
 
 In another terminal, test with:
@@ -86,9 +114,9 @@ curl -f -F 'image=@bottle.jpg;type=image/jpeg' \
   http://127.0.0.1:18080/v1/recognize
 ```
 
-For external backends, use the protected Tuna URL `https://rirodionov-wine-api.ru.tuna.am` and send `X-Token` from a secret manager. It enforces HTTPS and a 2 requests/second rate limit; the token is shared separately and must not be committed.
+For external backends, use `https://akcizny-sbor.ru.tuna.am` and send the key from `secrets/tuna.key` in `X-Token`. Tuna enforces HTTPS and a 2 requests/second rate limit. The repository must stay private while it contains this hackathon key.
 
-A backend on the same private network can call `http://10.227.91.47:8080` directly. The worker IP may change on restart; confirm it with `hostname -I` and update the backend configuration. The API itself has no authentication or CORS: use the protected Tuna URL for external server-to-server access, and never expose port 8080 directly to the public internet.
+A backend on the same private network can call `http://PRIVATE_GPU_HOST:8080` directly. The API itself has no authentication or CORS: use the protected Tuna URL for external server-to-server access, and never expose port 8080 directly to the public internet.
 
 ## Self-contained clone with weights
 

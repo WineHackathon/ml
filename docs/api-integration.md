@@ -2,19 +2,19 @@
 
 This is the integration and operations handoff for the application backend. The service accepts image bytes and returns a proposed wine-catalog match; it does not accept an image URL or JSON/base64 payload. Send `multipart/form-data` with the field name `image`.
 
-## Current H100 deployment
+## Deployment endpoints
 
-The service is running on `rirodionov-sr008`, bound to its private interface at `10.227.91.47:8080`. A backend on the same private network can use `http://10.227.91.47:8080` as its base URL. This is the current worker IP, not a stable DNS name; it may change when the worker is recreated.
+On a private network, bind the service to a private GPU-worker address and use `http://PRIVATE_GPU_HOST:8080` as the base URL. That address is deployment-specific and may change when the worker is recreated.
 
-For a backend outside that private network, use the protected Tuna endpoint `https://rirodionov-wine-api.ru.tuna.am`. Send the key in the `X-Token` header. Tuna enforces HTTPS, key authentication, and a 2 requests/second rate limit; the token is shared out of band and is not stored in this repository.
+For external backends, use `https://akcizny-sbor.ru.tuna.am`. Send the shared key in `X-Token`; Tuna enforces HTTPS, key authentication, and a 2 requests/second rate limit.
 
-The address is not reachable directly from the developer laptop. For local testing, keep this tunnel open:
+For local testing without Tuna, keep an SSH tunnel open (replace the example host/alias with deployment values):
 
 ```bash
-ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008
+ssh -N -L 18080:PRIVATE_GPU_HOST:8080 SSH_ALIAS
 ```
 
-Then use `http://127.0.0.1:18080` as the base URL. Verified through this tunnel: `/ready` returned 200 and `/v1/eval/predict` returned a slug for an uploaded catalog image.
+Then use `http://127.0.0.1:18080` as the base URL.
 
 Public Tuna request example:
 
@@ -22,7 +22,7 @@ Public Tuna request example:
 export WINE_ML_API_TOKEN='load-from-your-secret-manager'
 curl -fS -H "X-Token: $WINE_ML_API_TOKEN" \
   -F 'image=@bottle.jpg;type=image/jpeg' \
-  https://rirodionov-wine-api.ru.tuna.am/v1/recognize
+  https://akcizny-sbor.ru.tuna.am/v1/recognize
 ```
 
 ## Endpoints
@@ -152,7 +152,7 @@ import os
 
 with open("bottle.jpg", "rb") as image:
     response = requests.post(
-        "https://rirodionov-wine-api.ru.tuna.am/v1/recognize",
+        "https://akcizny-sbor.ru.tuna.am/v1/recognize",
         files={"image": ("bottle.jpg", image, "image/jpeg")},
         headers={"X-Token": os.environ["WINE_ML_API_TOKEN"]},
         timeout=12,
@@ -166,12 +166,11 @@ The runnable repository examples are [`examples/backend_client.py`](../examples/
 
 ## Deployment and security handoff
 
-- Current host: `rirodionov-sr008`; active code directory: `/workspace-SR008.fs2/rodionov/wine-ml-api`; Python environments stay in `/home/jovyan/wine-ml-api`.
-- Models are read from persistent FS2 at `/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models`; the setup verifies pinned hashes and does not copy them into the code directory.
-- Current base URL for a backend with private-network routing: `http://10.227.91.47:8080`. The worker IP is ephemeral; re-check `hostname -I` after worker replacement. This route is private and does not require Tuna's token.
-- Public base URL: `https://rirodionov-wine-api.ru.tuna.am`; the Tuna ingress requires `X-Token` and limits traffic to 2 requests/second. The protected ingress was verified from outside the H100 host: missing token returned 401, valid token returned `/ready` 200, and both prediction routes returned HTTP 200.
-- For a developer laptop, tunnel with `ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008`, then call `http://127.0.0.1:18080`. Direct laptop access to the private IP is not routed.
-- There is no authentication in the API itself. Tuna protects the public ingress with `X-Token`, HTTPS, and a rate limit; direct access to the private worker IP has no auth. Do not expose port 8080 directly to the public internet. Store the Tuna key in a backend secret manager, not source control.
+- Put the application checkout and Python environments on the deployment's persistent volume. Set `WINE_ENV_ROOT` to the persistent environment directory and `WINE_MODELS_ROOT` to the directory containing the pinned model files.
+- For private-network calls, bind only to a private worker interface and configure the backend with `http://PRIVATE_GPU_HOST:8080`.
+- Public base URL: `https://akcizny-sbor.ru.tuna.am`; requests require `X-Token` and are rate limited to 2 requests/second. Missing keys return 401; the deployed `/ready` and both prediction routes were verified with a valid key.
+- The API itself has no authentication. The Tuna ingress protects the public endpoint; direct access to the private worker address has no auth. Do not expose port 8080 directly to the public internet.
+- For this hackathon, the shared Tuna key is committed at [`secrets/tuna.key`](../secrets/tuna.key) in the private repository. Anyone with repository access can use it; rotate it and move it to a secret manager before any production use.
 - Call it server-to-server from the backend, not directly from a browser: this service has no CORS policy or user auth.
 - The optional `token` parameter in the example clients sends `X-Token` for Tuna. Direct private-network calls can omit it. The model API itself does not validate this token; Tuna does.
 
