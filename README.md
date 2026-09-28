@@ -21,6 +21,8 @@ python3.12 -m venv .venv-ocr
 
 ## H100 setup and launch
 
+For the shortest deployment path using the already-persisted FS2 model weights, see [`docs/quickstart-h100.md`](docs/quickstart-h100.md).
+
 The tested GPU profile is native Linux on one NVIDIA H100, not CUDA Docker. It requires Python 3.12, `uv`, and Git LFS. The bundled models are used by default; set `WINE_MODELS_ROOT` to an external directory (for example, persistent FS2 storage) to use an existing copy instead.
 
 ```bash
