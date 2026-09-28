@@ -79,7 +79,9 @@ curl -f -F 'image=@bottle.jpg;type=image/jpeg' \
   http://127.0.0.1:18080/v1/recognize
 ```
 
-A backend on the same private network can call `http://10.227.91.47:8080` directly. The worker IP may change on restart; confirm it with `hostname -I` and update the backend configuration. The API has no built-in authentication or CORS, so call it server-to-server and do not expose it to the public internet.
+For external backends, use the protected Tuna URL `https://rirodionov-wine-api.ru.tuna.am` and send `X-Token` from a secret manager. It enforces HTTPS and a 2 requests/second rate limit; the token is shared separately and must not be committed.
+
+A backend on the same private network can call `http://10.227.91.47:8080` directly. The worker IP may change on restart; confirm it with `hostname -I` and update the backend configuration. The API itself has no authentication or CORS: use the protected Tuna URL for external server-to-server access, and never expose port 8080 directly to the public internet.
 
 ## Self-contained clone with weights
 

@@ -16,7 +16,7 @@ def recognize(base_url: str, image: Path, token: str | None = None, timeout: flo
     ).encode() + image.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
     headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["X-Token"] = token
     request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/recognize", body, headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.load(response)
@@ -24,4 +24,3 @@ def recognize(base_url: str, image: Path, token: str | None = None, timeout: flo
 
 if __name__ == "__main__":
     print(json.dumps(recognize(sys.argv[1], Path(sys.argv[2])), ensure_ascii=False, indent=2))
-

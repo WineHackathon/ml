@@ -6,6 +6,8 @@ This is the integration and operations handoff for the application backend. The 
 
 The service is running on `rirodionov-sr008`, bound to its private interface at `10.227.91.47:8080`. A backend on the same private network can use `http://10.227.91.47:8080` as its base URL. This is the current worker IP, not a stable DNS name; it may change when the worker is recreated.
 
+For a backend outside that private network, use the protected Tuna endpoint `https://rirodionov-wine-api.ru.tuna.am`. Send the key in the `X-Token` header. Tuna enforces HTTPS, key authentication, and a 2 requests/second rate limit; the token is shared out of band and is not stored in this repository.
+
 The address is not reachable directly from the developer laptop. For local testing, keep this tunnel open:
 
 ```bash
@@ -13,6 +15,15 @@ ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008
 ```
 
 Then use `http://127.0.0.1:18080` as the base URL. Verified through this tunnel: `/ready` returned 200 and `/v1/eval/predict` returned a slug for an uploaded catalog image.
+
+Public Tuna request example:
+
+```bash
+export WINE_ML_API_TOKEN='load-from-your-secret-manager'
+curl -fS -H "X-Token: $WINE_ML_API_TOKEN" \
+  -F 'image=@bottle.jpg;type=image/jpeg' \
+  https://rirodionov-wine-api.ru.tuna.am/v1/recognize
+```
 
 ## Endpoints
 
@@ -137,11 +148,13 @@ Do not retry 400/422. For 503, check readiness and use bounded backoff; do not r
 
 ```python
 import requests
+import os
 
 with open("bottle.jpg", "rb") as image:
     response = requests.post(
-        "http://HOST:8080/v1/recognize",
+        "https://rirodionov-wine-api.ru.tuna.am/v1/recognize",
         files={"image": ("bottle.jpg", image, "image/jpeg")},
+        headers={"X-Token": os.environ["WINE_ML_API_TOKEN"]},
         timeout=12,
     )
 response.raise_for_status()
@@ -155,10 +168,11 @@ The runnable repository examples are [`examples/backend_client.py`](../examples/
 
 - Current host: `rirodionov-sr008`; code directory: `/home/jovyan/wine-ml-api`.
 - Models are read from persistent FS2 at `/workspace-SR008.fs2/rodionov/data/models/wine-ml/fc3bf115-h100-20260925/models`; the setup verifies pinned hashes and does not copy them into the code directory.
-- Current base URL for a backend with private-network routing: `http://10.227.91.47:8080`. The worker IP is ephemeral; re-check `hostname -I` after worker replacement.
+- Current base URL for a backend with private-network routing: `http://10.227.91.47:8080`. The worker IP is ephemeral; re-check `hostname -I` after worker replacement. This route is private and does not require Tuna's token.
+- Public base URL: `https://rirodionov-wine-api.ru.tuna.am`; the Tuna ingress requires `X-Token` and limits traffic to 2 requests/second. The protected ingress was verified from outside the H100 host: missing token returned 401, valid token returned `/ready` 200, and both prediction routes returned HTTP 200.
 - For a developer laptop, tunnel with `ssh -N -L 18080:10.227.91.47:8080 rirodionov-sr008`, then call `http://127.0.0.1:18080`. Direct laptop access to the private IP is not routed.
-- There is no authentication in the API itself. It is currently bound only to the worker's private IP, but is still unauthenticated on that network. Keep it private or put an authenticated reverse proxy/network policy in front; do not expose it publicly.
+- There is no authentication in the API itself. Tuna protects the public ingress with `X-Token`, HTTPS, and a rate limit; direct access to the private worker IP has no auth. Do not expose port 8080 directly to the public internet. Store the Tuna key in a backend secret manager, not source control.
 - Call it server-to-server from the backend, not directly from a browser: this service has no CORS policy or user auth.
-- The optional `token` parameter in the example clients sends a bearer token to an upstream proxy. The model API does not validate that token itself.
+- The optional `token` parameter in the example clients sends `X-Token` for Tuna. Direct private-network calls can omit it. The model API itself does not validate this token; Tuna does.
 
 The repository's [optimization report](optimization-summary.md) documents the small evaluation sets and performance limits; do not present them as production-wide accuracy/SLO guarantees.
