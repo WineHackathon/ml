@@ -1,0 +1,30 @@
+{
+    "transformer_task": "any-to-any",
+    "modality_config": {
+        "text": {
+            "method": "forward",
+            "method_output_name": "logits"
+        },
+        "image": {
+            "method": "forward",
+            "method_output_name": "logits"
+        },
+        "video": {
+            "method": "forward",
+            "method_output_name": "logits"
+        },
+        "message": {
+            "method": "forward",
+            "method_output_name": "logits",
+            "format": "structured"
+        }
+    },
+    "module_output_name": "causal_logits",
+    "unpad_inputs": false,
+    "processing_kwargs": {
+        "chat_template": {
+            "chat_template": "reranker",
+            "add_generation_prompt": true
+        }
+    }
+}

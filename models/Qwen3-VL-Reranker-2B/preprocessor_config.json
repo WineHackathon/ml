@@ -1,0 +1,29 @@
+{
+    "size": {
+        "longest_edge": 16777216,
+        "shortest_edge": 65536
+    },
+    "patch_size": 16,
+    "temporal_patch_size": 2,
+    "image_mean": [
+        0.5,
+        0.5,
+        0.5
+    ],
+    "image_std": [
+        0.5,
+        0.5,
+        0.5
+    ],
+    "processor_class": "Qwen3VLProcessor",
+    "image_processor_type": "Qwen2VLImageProcessorFast",
+    "input_data_format": null,
+    "max_pixels": 1310720,
+    "merge_size": 2,
+    "min_pixels": 4095,
+    "pad_size": null,
+    "processor_class": "Qwen3VLProcessor",
+    "resample": 3,
+    "rescale_factor": 0.00392156862745098,
+    "return_tensors": null
+}

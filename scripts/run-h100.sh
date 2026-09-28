@@ -2,7 +2,8 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-: "${WINE_MODELS_ROOT:?set WINE_MODELS_ROOT to the external model directory}"
+WINE_MODELS_ROOT="${WINE_MODELS_ROOT:-$root/models}"
+export WINE_MODELS_ROOT
 
 export CUDA_VISIBLE_DEVICES="${WINE_CUDA_DEVICE:-0}"
 export WINE_DEVICE="${WINE_DEVICE:-cuda}"

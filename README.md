@@ -4,24 +4,24 @@ Offline wine recognition for the hackathon catalog. The default launcher runs th
 
 ## Prepare a clean clone
 
-Python 3.12 is the tested profile. Catalog reference images and model weights are intentionally not committed.
+Python 3.12 is the tested profile. The catalog reference images are in Git and the four pinned model snapshots are bundled through Git LFS. Install Git LFS before cloning; the Qwen weight is stored as three verified parts and reassembled locally.
 
 ```bash
+git lfs pull
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.lock
 python3.12 -m venv .venv-ocr
 .venv-ocr/bin/pip install -r requirements-ocr.lock
-.venv/bin/python scripts/download_models.py
-.venv/bin/python scripts/provision_assets.py --fetch-public /path/to/extracted/organizer/uploads
+.venv/bin/python scripts/download_models.py --offline
 .venv/bin/python scripts/verify_artifacts.py
 ./scripts/run.sh
 ```
 
-`download_models.py` resolves all four repositories at the commits in `models.lock.json` and verifies their primary weight hashes. `provision_assets.py` scans the extracted organizer catalog, copies only files whose SHA-256 appears in the manifest, and downloads only manifest-pinned official images from `api.vino-svoe.ru`. It exits nonzero until all 2,087 references are present. Neither source photos, the RAR, model weights, nor evaluation queries are in this repository.
+`download_models.py` verifies all primary weight hashes from `models.lock.json`. Without `--offline`, missing weights may be fetched from the pinned Hugging Face revisions. The split Qwen parts are concatenated into the ignored local `models/Qwen3-VL-Reranker-2B/model.safetensors` file. The bundled 2,062 reference images and checked-in index make the service runnable without the organizer archive or evaluation photos.
 
 ## H100 setup and launch
 
-The tested GPU profile is native Linux on one NVIDIA H100, not CUDA Docker. It requires Python 3.12 and `uv`. `WINE_MODELS_ROOT` must be an external model directory containing the exact layouts and weights pinned by `models.lock.json`, including `f775b65a79762255128c981547af89addcfe0f88`, `Qwen3-VL-Reranker-2B`, and `paddlex/official_models/`.
+The tested GPU profile is native Linux on one NVIDIA H100, not CUDA Docker. It requires Python 3.12, `uv`, and Git LFS. The bundled models are used by default; set `WINE_MODELS_ROOT` to an external directory (for example, persistent FS2 storage) to use an existing copy instead.
 
 ```bash
 export WINE_MODELS_ROOT=/path/to/persistent/models
@@ -29,7 +29,7 @@ export WINE_MODELS_ROOT=/path/to/persistent/models
 ./scripts/run-h100.sh
 ```
 
-`setup-h100.sh` creates `.venv-h100` from `requirements-h100.lock` with the CUDA 12.8 PyTorch backend and `.venv-ocr-gpu` from `requirements-ocr-gpu.lock`. `run-h100.sh` selects CUDA device 0 by default, the FP32 H100 reranker config, cached reference images, cuDNN SDPA disabled, and the persistent GPU OCR worker. Override the GPU with `WINE_CUDA_DEVICE`; the service still uses one Uvicorn worker.
+For the bundled models, omit the export above and run the two scripts. `setup-h100.sh` pulls LFS objects, creates `.venv-h100` from `requirements-h100.lock` with the CUDA 12.8 PyTorch backend and `.venv-ocr-gpu` from `requirements-ocr-gpu.lock`, assembles/verifies the local weights, and verifies the index. `run-h100.sh` selects CUDA device 0 by default, the FP32 H100 reranker config, cached reference images, cuDNN SDPA disabled, and the persistent GPU OCR worker. Override the GPU with `WINE_CUDA_DEVICE`; the service still uses one Uvicorn worker.
 
 Wait for `GET /ready` rather than a fixed sleep. Measured cold readiness was about 159–164 seconds, and the API plus OCR worker used about 7.8–8.0 GiB RSS. The 20-image H100 field sample had p50 2,112.65 ms, p95 2,677.1 ms, max 3,237.1 ms, and no HTTP failures. This establishes sample p95 below three seconds, not that every request finishes below three seconds and not a production SLO. Keep the 12-second backend timeout used by the examples.
 
