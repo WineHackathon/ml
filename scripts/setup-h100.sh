@@ -5,9 +5,12 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 uv="${UV:-uv}"
 python="${WINE_PYTHON_BIN:-python3.12}"
-export WINE_MODELS_ROOT="${WINE_MODELS_ROOT:-$root/models}"
+WINE_MODELS_ROOT="${WINE_MODELS_ROOT:-$root/models}"
+export WINE_MODELS_ROOT
 
-git lfs pull
+if [ "$WINE_MODELS_ROOT" = "$root/models" ]; then
+  git lfs pull
+fi
 
 "$uv" venv --allow-existing --python "$python" .venv-h100
 "$uv" pip sync --python .venv-h100/bin/python --torch-backend cu128 requirements-h100.lock

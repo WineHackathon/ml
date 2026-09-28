@@ -35,6 +35,8 @@ Wait for `GET /ready` rather than a fixed sleep. Measured cold readiness was abo
 
 ## API and organizer contract
 
+See [`docs/api-integration.md`](docs/api-integration.md) for the request/response schema, error handling, readiness, and a backend example.
+
 ```bash
 curl -f http://127.0.0.1:8080/health
 curl -f http://127.0.0.1:8080/ready
