@@ -31,6 +31,7 @@ export UV_PYTHON_INSTALL_DIR="$WINE_APP_ROOT/.python"
 "$UV" python install 3.12.11 --install-dir "$UV_PYTHON_INSTALL_DIR"
 export WINE_PYTHON_BIN="$("$UV" python find 3.12.11)"
 export WINE_ENV_ROOT="$WINE_APP_ROOT"
+export HOME="$WINE_APP_ROOT"
 ```
 
 Set the root to the persistent directory containing the pinned model snapshots, and place the Tuna account config in the ignored `.private` directory with mode 600:
