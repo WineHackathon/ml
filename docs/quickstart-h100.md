@@ -80,7 +80,7 @@ curl -fS -X POST http://127.0.0.1:8080/v1/recognize \
   -F 'image=@bottle.jpg;type=image/jpeg'
 ```
 
-Upload image bytes as multipart field `image` (JPEG, PNG, or WebP; max 20 MiB and 32 megapixels). The response contains a suggested `slug`, catalog `card`, up to five `top5` alternatives, raw scores, and `timings_ms`. `confidence` is `null`; scores are not calibrated probabilities. For the minimal organizer response, use `/v1/eval/predict`, which returns only `{"slug":"..."}`.
+Upload image bytes as multipart field `image` (JPEG, PNG, or WebP; max 20 MiB and 32 megapixels). The response contains a suggested `slug`, catalog `card`, up to five `top5` alternatives, raw scores, and `timings_ms`. When `status` is `similar_candidate`, display the card as an analogue, not an exact identification. `confidence` is always `null` and scores are not calibrated probabilities. For the minimal organizer response, use `/v1/eval/predict`, which returns only `{"slug":"..."}`.
 
 ## Start the protected Tuna endpoint
 
@@ -99,12 +99,27 @@ done
 
 Detach with `Ctrl-B`, then `D`. The public URL is `https://akcizny-sbor.ru.tuna.am`; clients send the same externally managed token in `X-Token`. Keep the token outside Git.
 
-## Access from a developer laptop
+## Run the organizer evaluation on the GPU host
 
-For direct local development without Tuna, open an SSH tunnel using the deployment's private host and SSH alias:
+The organizer's script needs `bash`, `curl`, `jq`, and `awk`. Run it next to the GPU service so uploading the control photos does not consume the script's fixed 10-second request timeout:
 
 ```bash
-ssh -N -L 18080:PRIVATE_GPU_HOST:8080 SSH_ALIAS
+export PATH="$WINE_APP_ROOT/.tools:$PATH"
+bash /path/to/eval/participant_test.sh \
+  --images-dir /path/to/eval/queries \
+  --manifest /path/to/eval/queries.tsv \
+  --endpoint http://127.0.0.1:8080/v1/eval/predict \
+  --output /path/to/eval/predictions.jsonl
+```
+
+Install `jq` on the GPU host if missing. The verified standalone Linux AMD64 binary can be placed at `$WINE_APP_ROOT/.tools/jq` from the [official jq 1.8.2 release](https://github.com/jqlang/jq/releases/tag/jq-1.8.2); its SHA-256 is `b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f`. Use a new output path for each run because the script refuses to overwrite an existing predictions file.
+
+## Access from a developer laptop
+
+For direct local development without Tuna, open an SSH tunnel to the service's loopback port:
+
+```bash
+ssh -N -L 18080:127.0.0.1:8080 SSH_ALIAS
 ```
 
 In another terminal, test with:
@@ -114,6 +129,18 @@ curl -f http://127.0.0.1:18080/ready
 curl -f -F 'image=@bottle.jpg;type=image/jpeg' \
   http://127.0.0.1:18080/v1/recognize
 ```
+
+The organizer's script can also run on the laptop with `bash`, `curl`, `jq`, and `awk` installed. The script has no `X-Token` option, so use this tunnel rather than the protected public Tuna URL; transfer delays will count toward its 10-second timeout:
+
+```bash
+bash /path/to/eval/participant_test.sh \
+  --images-dir /path/to/eval/queries \
+  --manifest /path/to/eval/queries.tsv \
+  --endpoint http://127.0.0.1:18080/v1/eval/predict \
+  --output /path/to/predictions.jsonl
+```
+
+The eval endpoint returns exactly one non-empty `slug` per image. The full `/v1/recognize` response tells the application whether that slug is a regular candidate or a `similar_candidate` analogue.
 
 For external backends, use `https://akcizny-sbor.ru.tuna.am` and send the token from your secret manager in `X-Token`. Tuna enforces HTTPS and a 2 requests/second rate limit. Never commit the token; rotate the previously committed value before production use.
 

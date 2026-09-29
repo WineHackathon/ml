@@ -1,5 +1,7 @@
 # Wine ML API
 
+The [architecture guide](ARCHITECTURE.md) maps the recognition stages and application boundary.
+
 Offline wine recognition for the hackathon catalog. The default launcher runs the selected pipeline: frozen SigLIP2 retrieval, label OCR candidate fusion, and sequential `Qwen/Qwen3-VL-Reranker-2B` scoring. The checked-in index covers 2,087 of 2,103 slugs; returned scores are raw, uncalibrated diagnostics, not probabilities.
 
 ## Prepare a clean clone
@@ -33,7 +35,7 @@ export WINE_MODELS_ROOT=/path/to/persistent/models
 
 For the bundled models, omit the export above and run the two scripts. `setup-h100.sh` pulls LFS objects, creates `.venv-h100` from `requirements-h100.lock` with the CUDA 12.8 PyTorch backend and `.venv-ocr-gpu` from `requirements-ocr-gpu.lock`, assembles/verifies the local weights, and verifies the index. `run-h100.sh` selects CUDA device 0 by default, the FP32 H100 reranker config, cached reference images, cuDNN SDPA disabled, and the persistent GPU OCR worker. Override the GPU with `WINE_CUDA_DEVICE`; the service still uses one Uvicorn worker.
 
-Wait for `GET /ready` rather than a fixed sleep. Measured cold readiness was about 159–164 seconds, and the API plus OCR worker used about 7.8–8.0 GiB RSS. The 20-image H100 field sample had p50 2,112.65 ms, p95 2,677.1 ms, max 3,237.1 ms, and no HTTP failures. This establishes sample p95 below three seconds, not that every request finishes below three seconds and not a production SLO. Keep the 12-second backend timeout used by the examples.
+Wait for `GET /ready` rather than a fixed sleep. Measured cold readiness was about 159–164 seconds, and the API plus OCR worker used about 7.8–8.0 GiB RSS. Before the 2026-09-29 scoring update, the 20-image H100 field sample had p50 2,112.65 ms, p95 2,677.1 ms, max 3,237.1 ms, and no HTTP failures. This establishes sample p95 below three seconds for that run, not a production SLO. Keep the 12-second backend timeout used by the examples.
 
 ## API and organizer contract
 
@@ -46,7 +48,7 @@ curl -f -F image=@query.webp http://127.0.0.1:8080/v1/eval/predict
 curl -f -F image=@query.webp http://127.0.0.1:8080/v1/recognize
 ```
 
-`POST /v1/eval/predict` returns exactly `{"slug":"..."}` for the organizer client. `POST /v1/recognize` adds the catalog card, top five, raw visual/Qwen scores, margin, timings, model/catalog versions, provisional identity provenance, and `confidence: null`. Uploads are decoded from bytes, capped at 20 MiB and 32 megapixels, and never treated as fetchable URLs.
+`POST /v1/eval/predict` returns exactly `{"slug":"..."}` for the organizer client. `POST /v1/recognize` adds the catalog card, top five, raw visual/Qwen scores, margin, timings, model/catalog versions, provisional identity provenance, and `confidence: null`. Its `status` is `similar_candidate` when the best card should be presented as an analogue rather than an exact identification. Uploads are decoded from bytes, capped at 20 MiB and 32 megapixels, and never treated as fetchable URLs.
 
 To run the provided organizer script without copying it into this repository:
 
@@ -56,6 +58,8 @@ bash "$ORGANIZER_SCRIPT" \
   --manifest "$ORGANIZER_MANIFEST" \
   --endpoint http://127.0.0.1:8080/v1/eval/predict
 ```
+
+The script needs `curl`, `jq`, and `awk` on the machine running it. When running it from a laptop against a loopback-bound GPU host, use the SSH tunnel in [`docs/quickstart-h100.md`](docs/quickstart-h100.md) and set the endpoint to `http://127.0.0.1:18080/v1/eval/predict`.
 
 Python and TypeScript backend examples are in `examples/`; both call `POST /v1/recognize` and use a 12-second upstream timeout. The tested Apple M4 Pro MPS + CPU-OCR profile completed full requests in roughly 7.0–8.7 seconds. Run one worker because each worker duplicates model memory. Plan for at least 8 GB of model/cache disk and a 16 GB machine.
 

@@ -1,5 +1,13 @@
 # Optimization summary
 
+The original benchmark table below describes the scoring build before the 2026-09-29 OCR name and `similar_candidate` update. The frozen gallery, index, and model weights did not change; the updated scoring build needs its own independent accuracy and latency benchmark.
+
+## 2026-09-29 replay of used control photos
+
+On the updated H100 service, the original organizer script returned a non-empty slug for all three public control photos from `eval/queries/` with 0 HTTP errors. Server-local script latencies were 3.759 s, 2.685 s, and 1.709 s. The first and third bottles were absent from the catalog and received `similar_candidate` analogue cards through `/v1/recognize`; the second returned the exact catalog slug `massandra-muskatel-belyy-belye-sorta-vinograda-beloe-sladkoe-16`. These three cases establish behavior on known scenes, not organizer accuracy: the closed gold table was not available.
+
+The same reused agent-reviewed silver labels gave 9/9 on the eligible DEV subset, 8/11 on holdout v1, and 5/5 on holdout v2. All 25 direct H100 requests returned HTTP 200, and none of the 25 exact-labeled wines was marked `similar_candidate`. These labels were used during development and are not an independent estimate. A separate run over an SSH tunnel showed request timeouts despite fast direct H100 responses; use a server-local evaluator for timed checks and avoid competing GPU jobs.
+
 ## Runtime profiles
 
 Both tested profiles use the frozen v2 SigLIP2 gallery, label-blind OCR entity fusion into a six-item pool, and sequential `Qwen/Qwen3-VL-Reranker-2B` scoring. `scripts/run.sh` is the Apple M4 Pro MPS + CPU-OCR profile. `scripts/run-h100.sh` is the one-H100 profile with full-FP32 Qwen, cached references, cuDNN SDPA disabled, and a persistent GPU OCR worker. Both expose the same HTTP API; `WINE_RERANKER=off` is the same-gallery SigLIP-only rollback.
@@ -22,8 +30,8 @@ The H100 field sample establishes p95 below three seconds for that run, not that
 - portable v2 index: `artifacts/catalog_v2/catalog_index.npz`, SHA-256 `bcf7caccccf1629863794313c5c90efbf2de5be890917c7f69d77bb761390fce`
 - sanitized v2 manifest: `data/catalog_manifest.jsonl`, SHA-256 `be1865f14c13b25a2a2b2223402650dd4164163e43ed8561b7a2fbfe5955fd8c`
 - pre-quarantine source index: SHA-256 `8a884e6eedb8212d22c5647f23bb63bb6c89035eb9e229f16ef7278f89e7a3b8`; quarantine removed two gallery rows for one slug, while every unaffected entry and embedding row remained unchanged
-- MPS config: `artifacts/qwen_reranker/config.json`, SHA-256 `217e76a35bcac995efc53fbee894a02dbaea7460a985d1c5c7df78a524edc009`
-- H100 FP32 config: `artifacts/qwen_reranker/config-h100.json`, SHA-256 `5980e6f24598e425e754e886bda247859857cddf6d819f16c511d36bf5d09abe`
+- MPS config: `artifacts/qwen_reranker/config.json`, SHA-256 `9ce28a46839640654ad39b0eb2ead307bd5cef213f7fc3a0fa82d06cb2b47d8c`
+- H100 FP32 config: `artifacts/qwen_reranker/config-h100.json`, SHA-256 `d1dbddc87af879ad47e199f99937302849ff4c8ba98c7d95c0d53aa42f56c717`
 - Qwen weights: revision `4bd860ac4f15ad1897a214615cccc700f8f71818`, SHA-256 `466ec01961061e9d7f804b4fb1625fb6f406106cd1567e026096d4736fa9d5b9`
 
 ## Launch and rollback

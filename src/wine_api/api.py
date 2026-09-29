@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 from . import __version__
+from .candidate_fusion import CONFIG as FUSION_CONFIG, prefer_exact_name, similarity_reason
 from .preprocess import InvalidImage, decode_image, retrieval_views
 from .retrieval import CatalogIndex, DEFAULT_MODEL, DEFAULT_REVISION, ImageEncoder, load_manifest, manifest_image_path, manifest_slug
 
@@ -141,12 +142,14 @@ class Predictor:
                     for entry in self.index.entries
                 }
                 if config.get("candidate_policy") == "frozen_siglip_top6_ocr_entity_replacement":
-                    from .candidate_fusion import CONFIG, fuse, load_catalog
+                    from .candidate_fusion import fuse, load_catalog
 
-                    fusion_sha = hashlib.sha256(json.dumps(CONFIG, sort_keys=True).encode()).hexdigest()
+                    fusion_sha = hashlib.sha256(json.dumps(FUSION_CONFIG, sort_keys=True).encode()).hexdigest()
                     if fusion_sha != config["candidate_fusion_config_sha256"]:
                         raise ValueError("candidate fusion config hash mismatch")
-                    catalog, producer_df, assets = load_catalog(manifest_path)
+                    catalog, producer_df, assets = load_catalog(manifest_path, set(self.gallery_by_slug))
+                    if len(catalog) != len(self.gallery_by_slug):
+                        raise ValueError("fusion catalog is missing indexed slugs")
                     self.fusion = (fuse, catalog, producer_df, assets)
                     self.ocr_python = Path(os.getenv("WINE_OCR_PYTHON", ".venv-ocr/bin/python"))
                     self.ocr_script = Path(os.environ.get("WINE_OCR_SCRIPT", "scripts/ocr_rerank.py")).resolve()
@@ -243,6 +246,7 @@ class Predictor:
         ocr_process = None
         temporary_path = None
         degraded_reason = None
+        name_override = False
         ocr_seconds = None
         qwen_seconds = 0.0
         request_deadline = started + OCR_REQUEST_TIMEOUT_SECONDS
@@ -337,6 +341,7 @@ class Predictor:
                     candidate = dict(scored.get(evidence["slug"]) or self.gallery_by_slug[evidence["slug"]])
                     candidate.update({
                         "ocr_entity_score": evidence["ocr_entity_score"],
+                        "ocr_name_exact_matches": evidence.get("ocr_name_exact_matches", 0),
                         "ocr_year_match": evidence["ocr_year_match"],
                         "ocr_year_mismatch": evidence["ocr_year_mismatch"],
                     })
@@ -375,10 +380,16 @@ class Predictor:
                         else (lambda item: (-item["reranker_score"], -item.get("ocr_entity_score", 0.0), item["slug"]))
                     )
                 )
+                if self.fusion:
+                    name_override = prefer_exact_name(candidates)
         top5 = candidates[:5]
+        similar_reason = (
+            similarity_reason(ocr["text"], top5[0]["card"], top5[0]["reranker_score"], catalog, producer_df)
+            if self.fusion and self.reranker and not degraded_reason else None
+        )
         finished = time.perf_counter()
         margin = None
-        if len(top5) > 1:
+        if len(top5) > 1 and not name_override:
             margin = (
                 top5[0]["reranker_score"] - top5[1]["reranker_score"]
                 if self.reranker and not degraded_reason
@@ -386,9 +397,11 @@ class Predictor:
             )
         gallery_policy = self.index.metadata.get("gallery_policy", "confirmed")
         return {
-            "status": "degraded_candidate" if degraded_reason else "provisional_candidate" if gallery_policy == "provisional" else "candidate",
+            "status": "similar_candidate" if similar_reason else "degraded_candidate" if degraded_reason else "provisional_candidate" if gallery_policy == "provisional" else "candidate",
             "degraded": bool(degraded_reason),
             "degraded_reason": degraded_reason,
+            "similarity_reason": similar_reason,
+            "selection_reason": "ocr_exact_name" if name_override else "reranker" if self.reranker else "visual",
             "slug": top5[0]["slug"],
             "card": top5[0]["card"],
             "confidence": None,

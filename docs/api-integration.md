@@ -8,10 +8,10 @@ On a private network, bind the service to a private GPU-worker address and use `
 
 For external backends, use `https://akcizny-sbor.ru.tuna.am`. Send the shared key in `X-Token`; Tuna enforces HTTPS, key authentication, and a 2 requests/second rate limit.
 
-For local testing without Tuna, keep an SSH tunnel open (replace the example host/alias with deployment values):
+For local testing without Tuna, keep an SSH tunnel open to the service's loopback port (replace the SSH alias with the deployment value):
 
 ```bash
-ssh -N -L 18080:PRIVATE_GPU_HOST:8080 SSH_ALIAS
+ssh -N -L 18080:127.0.0.1:8080 SSH_ALIAS
 ```
 
 Then use `http://127.0.0.1:18080` as the base URL.
@@ -52,7 +52,9 @@ curl -fS -X POST http://HOST:8080/v1/eval/predict \
   -F 'image=@/path/to/bottle.jpg;type=image/jpeg'
 ```
 
-It returns only `{"slug":"catalog-product-slug"}`. Prefer `/v1/recognize` if the product UI needs a card, alternatives, or diagnostic timings.
+It returns only `{"slug":"catalog-product-slug"}`. The organizer script requires a non-empty slug; it does not receive the exact-versus-similar distinction. Prefer `/v1/recognize` for the application UI.
+
+The provided evaluation script sends no authentication header. Run it on the GPU host with `curl`, `jq`, and `awk` and the direct loopback endpoint whenever possible. It can use the SSH-tunnel address above from a laptop, but photo transfer counts against the script's 10-second timeout. Do not point it at the protected Tuna URL.
 
 ## Full response
 
@@ -63,6 +65,8 @@ It returns only `{"slug":"catalog-product-slug"}`. Prefer `/v1/recognize` if the
   "status": "provisional_candidate",
   "degraded": false,
   "degraded_reason": null,
+  "similarity_reason": null,
+  "selection_reason": "reranker",
   "slug": "valeriy-zaharin-rubedo-reserve-merlo-krasnoe-suhoe-13",
   "card": {
     "slug": "valeriy-zaharin-rubedo-reserve-merlo-krasnoe-suhoe-13",
@@ -122,16 +126,19 @@ It returns only `{"slug":"catalog-product-slug"}`. Prefer `/v1/recognize` if the
 
 ### Response fields the backend should rely on
 
-- `slug`: the current best candidate slug. It is a suggestion, not a guaranteed identification.
-- `card`: pass-through catalog data for the selected `slug`. It commonly contains `slug`, `name`, `producer`, `region`, `color`, `type`, `grapes`, and `description`; fields vary by product. Render tolerantly and do not assume every field is present.
-- `top5`: up to five candidate records for a user-selection/review flow. Each has `slug`, visual `score`, `card`, and `provenance`; this pipeline also returns `reranker_score` and OCR evidence fields.
-- `status` / `degraded` / `degraded_reason`: candidate state. `provisional_candidate` is the normal current state; `degraded_candidate` means a candidate is returned without completed Qwen reranking.
-- `identity` and `gallery_policy`: provenance/trust labels. Current catalog coverage is mostly provisional; do not present the suggestion as verified identity.
+- `slug`: the selected catalog slug. If `status` is `similar_candidate`, this is an analogue, not an exact identification.
+- `card`: pass-through catalog data for the selected `slug`. It commonly contains `slug`, `name`, `producer`, `region`, `color`, `type`, `grapes`, and `description`; fields vary by product.
+- `top5`: up to five candidate records for review and diagnostics. Each has `slug`, visual `score`, `card`, and `provenance`; this pipeline also returns `reranker_score` and OCR evidence fields.
+- `status` / `degraded` / `degraded_reason`: `similar_candidate` means show a related wine with a clear label; `provisional_candidate` is the normal match state; `degraded_candidate` means Qwen reranking did not complete.
+- `similarity_reason`: `low_reranker_score` or `ocr_producer_conflict` for `similar_candidate`, otherwise `null`. `selection_reason` is `reranker`, `ocr_exact_name`, or `visual`. An exact OCR name may decide a close Qwen comparison; `margin` is null in that case.
+- `identity` and `gallery_policy`: provenance/trust labels. Current catalog coverage is mostly provisional, so do not present a suggestion as verified identity.
 - `confidence`: always `null` for this build. `raw_scores.visual_cosine`, `raw_scores.reranker`, and `margin` are uncalibrated ranking diagnostics, not probabilities. Do not display as a percent or use as a calibrated accept/reject threshold.
 - `timings_ms`: server-side stage timings; `ocr` may be `null` when OCR was not run. `total` is the API's measured inference time, not network/upload time.
 - `catalog_version`, `catalog_coverage`, `model_version`: diagnostics for logs/support; they can change with deployment/catalog updates.
 
 The current catalog index covers 2,087 of 2,103 manifest products, and most identities are provisional. The sample result above demonstrates the response shape only; it is not an accuracy claim.
+
+The similarity label uses a Qwen score floor and a clear OCR producer conflict. These heuristics were checked on three organizer control photos, not calibrated on an independent benchmark. A `similar_candidate` does not prove that the photographed wine is absent from the catalog.
 
 ## Errors and readiness
 
@@ -140,7 +147,7 @@ The current catalog index covers 2,087 of 2,103 manifest products, and most iden
 - `503`: model/OCR not ready or inference failed. Body: `{"detail":"..."}`. Check `GET /ready`; do not route requests until it returns 200.
 - `/health` is liveness only. `/ready` returns `{"ready":false,"error":"..."}` with HTTP 503 until initialization completes.
 
-Use a 12-second or greater client timeout. The measured H100 field sample had p95 2.68 seconds and max 3.24 seconds; other small evaluation runs reached 4.25 seconds. Treat this as a benchmark result, not a per-request SLA. Cold startup was about 159–164 seconds; keep traffic off until `/ready` returns 200.
+Use a 12-second or greater client timeout. Before the 2026-09-29 scoring update, the measured H100 field sample had p95 2.68 seconds and max 3.24 seconds; other small evaluation runs reached 4.25 seconds. Treat this as a historical benchmark result, not a per-request SLA. Cold startup was about 159–164 seconds; keep traffic off until `/ready` returns 200. Shared GPU load can cause much longer outliers; avoid concurrent GPU jobs during the organizer script's fixed 10-second request timeout.
 
 Do not retry 400/422. For 503, check readiness and use bounded backoff; do not retry in a tight loop while the model is unready. Inference is read-only, so a bounded retry after a network timeout is safe but repeats the compute. Limit backend concurrency: the deployment uses one worker and a shared H100.
 
