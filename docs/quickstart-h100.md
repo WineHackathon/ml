@@ -9,7 +9,7 @@ Choose an application path on the persistent volume assigned to the deployment, 
 ```bash
 git lfs install
 export WINE_APP_ROOT=/path/to/persistent/workspace/wine-ml-api
-GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch codex/quickstart \
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch main \
   https://github.com/WineHackathon/ml.git "$WINE_APP_ROOT"
 cd "$WINE_APP_ROOT"
 ```
